@@ -19,13 +19,11 @@ import org.slf4j.LoggerFactory
 import java.math.BigDecimal
 import java.math.BigInteger
 import java.util.UUID
-import kotlin.reflect.KClass
-import kotlin.reflect.KType
+import kotlin.reflect.*
 import kotlin.reflect.full.createType
 import kotlin.reflect.full.isSubclassOf
 import kotlin.reflect.full.memberProperties
 import kotlin.reflect.jvm.javaField
-import kotlin.reflect.typeOf
 
 /**
  * Responsible for generating the schema map that is used to power all object references across the API Spec.
@@ -117,12 +115,12 @@ object Kontent {
     logger.debug("Parsing Kontent of $type")
     when (val clazz = type.classifier as KClass<*>) {
       Unit::class -> cache
-      Int::class -> cache.plus(clazz.simpleName!! to FormatSchema("int32", "integer"))
-      Long::class -> cache.plus(clazz.simpleName!! to FormatSchema("int64", "integer"))
-      Double::class -> cache.plus(clazz.simpleName!! to FormatSchema("double", "number"))
-      Float::class -> cache.plus(clazz.simpleName!! to FormatSchema("float", "number"))
-      String::class -> cache.plus(clazz.simpleName!! to SimpleSchema("string"))
-      Boolean::class -> cache.plus(clazz.simpleName!! to SimpleSchema("boolean"))
+//      Int::class -> cache.plus(clazz.simpleName!! to FormatSchema("int32", "integer"))
+//      Long::class -> cache.plus(clazz.simpleName!! to FormatSchema("int64", "integer"))
+//      Double::class -> cache.plus(clazz.simpleName!! to FormatSchema("double", "number"))
+//      Float::class -> cache.plus(clazz.simpleName!! to FormatSchema("float", "number"))
+//      String::class -> cache.plus(clazz.simpleName!! to SimpleSchema("string"))
+//      Boolean::class -> cache.plus(clazz.simpleName!! to SimpleSchema("boolean"))
       UUID::class -> cache.plus(clazz.simpleName!! to FormatSchema("uuid", "string"))
       BigDecimal::class -> cache.plus(clazz.simpleName!! to FormatSchema("double", "number"))
       BigInteger::class -> cache.plus(clazz.simpleName!! to FormatSchema("int64", "integer"))
@@ -136,6 +134,25 @@ object Kontent {
     }
   }
 
+  val filterSchema = mapOf(
+    Int::class to FormatSchema(type = "integer", format = "int32"),
+    Integer::class to FormatSchema(type = "integer", format = "int32"),
+    Long::class to FormatSchema(type = "integer", format = "int64"),
+    Float::class to FormatSchema(type = "number", format = "float"),
+    Double::class to FormatSchema(type = "number", format = "double"),
+    String::class to SimpleSchema(type = "string"),
+    Boolean::class to SimpleSchema(type = "boolean")
+  )
+  @OptIn(ExperimentalStdlibApi::class)
+  val filterSchemaType = mapOf(
+    typeOf<Int>() to FormatSchema(type = "integer", format = "int32"),
+    typeOf<Long>() to FormatSchema(type = "integer", format = "int64"),
+    typeOf<Float>() to FormatSchema(type = "number", format = "float"),
+    typeOf<Double>() to FormatSchema(type = "number", format = "double"),
+    typeOf<String>() to SimpleSchema(type = "string"),
+    typeOf<Boolean>() to SimpleSchema(type = "boolean")
+  )
+
   /**
    * In the event of an object type, this method will parse out individual fields to recursively aggregate object map.
    * @param clazz Class of the object to analyze
@@ -147,7 +164,7 @@ object Kontent {
     // This needs to be simple because it will be stored under it's appropriate reference component implicitly
     val slug = type.getSimpleSlug()
     // Only analyze if component has not already been stored in the cache
-    return when (cache.containsKey(slug)) {
+    return when (cache.containsKey(slug) || clazz in filterSchema) {
       true -> {
         logger.debug("Cache already contains $slug, returning cache untouched")
         cache
@@ -179,7 +196,7 @@ object Kontent {
             listOf(yoinkBaseType)
           }
           // if the most up-to-date cache does not contain the content for this field, generate it and add to cache
-          if (!newCache.containsKey(field.simpleName)) {
+          if (!newCache.containsKey(field.simpleName) && clazz !in filterSchema) {
             logger.debug("Cache was missing ${field.simpleName}, adding now")
             yoinkedTypes.forEach {
               newCache = generateKTypeKontent(it, newCache)
@@ -194,7 +211,10 @@ object Kontent {
                 .map { ReferencedSchema(it.getReferenceSlug()) }
               AnyOfReferencedSchema(refs)
             } else {
-              ReferencedSchema(typeMap[prop.returnType.classifier]?.type!!.getReferenceSlug())
+              when (typeMap[prop.returnType.classifier]?.type in filterSchemaType) {
+                true -> filterSchemaType[typeMap[prop.returnType.classifier]?.type] ?: error("$field not in $filterSchema")
+                false -> ReferencedSchema(typeMap[prop.returnType.classifier]?.type!!.getReferenceSlug())
+              }
             }
           } else {
             if (yoinkedClassifier.isSealed) {
@@ -203,7 +223,10 @@ object Kontent {
                 .map { ReferencedSchema(it.getReferenceSlug()) }
               AnyOfReferencedSchema(refs)
             } else {
-              ReferencedSchema(field.getReferenceSlug(prop))
+              when (field in filterSchema) {
+                true -> filterSchema[field] ?: error("$field not in $filterSchema")
+                false -> ReferencedSchema(field.getReferenceSlug(prop))
+              }
             }
           }
           Pair(prop.name, propSchema)
@@ -255,7 +278,10 @@ object Kontent {
           ReferencedSchema(("$COMPONENT_SLUG/${it.getSimpleSlug()}"))
         })
       }
-      false -> ReferencedSchema("$COMPONENT_SLUG/$valClassName")
+      false -> when (type in filterSchemaType) {
+        true -> filterSchemaType[type] ?: error("$type not in $filterSchemaType")
+        false -> ReferencedSchema("$COMPONENT_SLUG/${valClassName}")
+      }
     }
     val schema = DictionarySchema(additionalProperties = valueReference)
     val updatedCache = generateKontent(valType, cache)
@@ -281,7 +307,10 @@ object Kontent {
           ReferencedSchema(("$COMPONENT_SLUG/${it.getSimpleSlug()}"))
         })
       }
-      false -> ReferencedSchema("$COMPONENT_SLUG/${collectionClass.simpleName}")
+      false -> when (collectionType in filterSchemaType) {
+        true -> filterSchemaType[collectionType] ?: error("$collectionType not in $filterSchemaType")
+        false -> ReferencedSchema("$COMPONENT_SLUG/${collectionClass.simpleName}")
+      }
     }
     val schema = ArraySchema(items = valueReference)
     val updatedCache = generateKontent(collectionType, cache)
