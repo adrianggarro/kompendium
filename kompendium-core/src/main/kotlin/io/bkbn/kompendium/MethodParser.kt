@@ -1,6 +1,6 @@
 package io.bkbn.kompendium
 
-import io.bkbn.kompendium.Kontent.filterSchema
+import io.bkbn.kompendium.Kontent.filterSchemaKClass
 import io.bkbn.kompendium.annotations.KompendiumParam
 import io.bkbn.kompendium.models.meta.MethodInfo
 import io.bkbn.kompendium.models.meta.RequestInfo
@@ -180,7 +180,7 @@ object MethodParser {
       val anny = prop.findAnnotation<KompendiumParam>()
         ?: error("Field ${prop.name} is not annotated with KompendiumParam")
       val schema = Kompendium.cache[field.getSimpleSlug(prop)]
-        ?: filterSchema[field]
+        ?: filterSchemaKClass[field]
       val defaultValue = getDefaultParameterValue(clazz, prop)
       OpenApiSpecParameter(
         name = prop.name,

@@ -134,7 +134,7 @@ object Kontent {
     }
   }
 
-  val filterSchema = mapOf(
+  val filterSchemaKClass = mapOf(
     Int::class to FormatSchema(type = "integer", format = "int32"),
     Integer::class to FormatSchema(type = "integer", format = "int32"),
     Long::class to FormatSchema(type = "integer", format = "int64"),
@@ -144,7 +144,7 @@ object Kontent {
     Boolean::class to SimpleSchema(type = "boolean")
   )
   @OptIn(ExperimentalStdlibApi::class)
-  val filterSchemaType = mapOf(
+  val filterSchemaKType = mapOf(
     typeOf<Int>() to FormatSchema(type = "integer", format = "int32"),
     typeOf<Long>() to FormatSchema(type = "integer", format = "int64"),
     typeOf<Float>() to FormatSchema(type = "number", format = "float"),
@@ -164,7 +164,7 @@ object Kontent {
     // This needs to be simple because it will be stored under it's appropriate reference component implicitly
     val slug = type.getSimpleSlug()
     // Only analyze if component has not already been stored in the cache
-    return when (cache.containsKey(slug) || clazz in filterSchema) {
+    return when (cache.containsKey(slug) || clazz in filterSchemaKClass) {
       true -> {
         logger.debug("Cache already contains $slug, returning cache untouched")
         cache
@@ -196,7 +196,7 @@ object Kontent {
             listOf(yoinkBaseType)
           }
           // if the most up-to-date cache does not contain the content for this field, generate it and add to cache
-          if (!newCache.containsKey(field.simpleName) && clazz !in filterSchema) {
+          if (!newCache.containsKey(field.simpleName) && clazz !in filterSchemaKClass) {
             logger.debug("Cache was missing ${field.simpleName}, adding now")
             yoinkedTypes.forEach {
               newCache = generateKTypeKontent(it, newCache)
@@ -211,8 +211,8 @@ object Kontent {
                 .map { ReferencedSchema(it.getReferenceSlug()) }
               AnyOfReferencedSchema(refs)
             } else {
-              when (typeMap[prop.returnType.classifier]?.type in filterSchemaType) {
-                true -> filterSchemaType[typeMap[prop.returnType.classifier]?.type] ?: error("$field not in $filterSchema")
+              when (typeMap[prop.returnType.classifier]?.type in filterSchemaKType) {
+                true -> filterSchemaKType[typeMap[prop.returnType.classifier]?.type] ?: error("$field not in $filterSchemaKClass")
                 false -> ReferencedSchema(typeMap[prop.returnType.classifier]?.type!!.getReferenceSlug())
               }
             }
@@ -223,8 +223,8 @@ object Kontent {
                 .map { ReferencedSchema(it.getReferenceSlug()) }
               AnyOfReferencedSchema(refs)
             } else {
-              when (field in filterSchema) {
-                true -> filterSchema[field] ?: error("$field not in $filterSchema")
+              when (field in filterSchemaKClass) {
+                true -> filterSchemaKClass[field] ?: error("$field not in $filterSchemaKClass")
                 false -> ReferencedSchema(field.getReferenceSlug(prop))
               }
             }
@@ -278,8 +278,8 @@ object Kontent {
           ReferencedSchema(("$COMPONENT_SLUG/${it.getSimpleSlug()}"))
         })
       }
-      false -> when (type in filterSchemaType) {
-        true -> filterSchemaType[type] ?: error("$type not in $filterSchemaType")
+      false -> when (type in filterSchemaKType) {
+        true -> filterSchemaKType[type] ?: error("$type not in $filterSchemaKType")
         false -> ReferencedSchema("$COMPONENT_SLUG/${valClassName}")
       }
     }
@@ -307,8 +307,8 @@ object Kontent {
           ReferencedSchema(("$COMPONENT_SLUG/${it.getSimpleSlug()}"))
         })
       }
-      false -> when (collectionType in filterSchemaType) {
-        true -> filterSchemaType[collectionType] ?: error("$collectionType not in $filterSchemaType")
+      false -> when (collectionType in filterSchemaKType) {
+        true -> filterSchemaKType[collectionType] ?: error("$collectionType not in $filterSchemaKType")
         false -> ReferencedSchema("$COMPONENT_SLUG/${collectionClass.simpleName}")
       }
     }
